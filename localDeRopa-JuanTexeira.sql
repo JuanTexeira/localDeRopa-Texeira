@@ -133,7 +133,7 @@ SELECT * FROM vendedor;
 SELECT * FROM cliente;
 SELECT * FROM venta;
 SELECT * FROM detalle_venta;
-*/
+
 /*
 DROP TABLE detalle_venta;
 DROP TABLE venta;
@@ -143,7 +143,69 @@ DROP TABLE prenda;
 DROP TABLE marca;
 */
 
+#Muestra la cantidad de ventas por vendedor
+CREATE VIEW ventas_por_vendedor AS
+SELECT venta.id_vendedor, vendedor.nombre_vendedor, COUNT(*) AS cantidad_ventas
+FROM venta
+INNER JOIN vendedor ON venta.id_vendedor = vendedor.id_vendedor
+GROUP BY venta.id_vendedor, vendedor.nombre_vendedor;
+
+#Muestra la cantidad de clientes que realizaron compras
+CREATE VIEW clientes_con_compras AS
+SELECT c.id_cliente, c.nombre_cliente, c.email_cliente
+FROM cliente AS c
+INNER JOIN venta AS v ON c.id_cliente = v.id_cliente;
+
+#Muestra aquellas marcas que tienen un porcentaje de descuento aplicado
+CREATE VIEW marcas_con_descuento AS
+SELECT *
+FROM marca
+WHERE descuento > 0;
+
+#Muetras el stock de prendas que hay por cada marca
+CREATE VIEW stock_prendas_por_marca AS
+SELECT m.nombre_marca, SUM(p.stock) AS stock_total
+FROM marca AS m
+INNER JOIN prenda AS p ON m.id_marca = p.id_marca
+GROUP BY m.nombre_marca;
+
+#Muestra la cantidad de ventas que se realizaron en tal mes del año
+CREATE VIEW ventas_por_mes AS
+SELECT MONTH(fecha_venta) AS mes, YEAR(fecha_venta) AS anio, COUNT(*) AS cantidad_ventas
+FROM venta
+GROUP BY mes, anio;
+
+SELECT * FROM ventas_por_vendedor;
+SELECT * FROM clientes_con_compras;
+SELECT * FROM marcas_con_descuento;
+SELECT * FROM stock_prendas_por_marca;
+SELECT * FROM ventas_por_mes;
 
 
+DELIMITER $$
+CREATE FUNCTION calcular_edad_cliente(p_fecha_nacimiento DATE)
+RETURNS INT DETERMINISTIC
+BEGIN
+    DECLARE edad INT;
+    SET edad = YEAR(CURRENT_DATE()) - YEAR(p_fecha_nacimiento);
+    IF MONTH(CURRENT_DATE()) < MONTH(p_fecha_nacimiento) THEN
+        SET edad = edad - 1;
+    ELSEIF MONTH(CURRENT_DATE()) = MONTH(p_fecha_nacimiento) AND DAY(CURRENT_DATE()) < DAY(p_fecha_nacimiento) THEN
+        SET edad = edad - 1;
+    END IF;
+    RETURN edad;
+END;
+$$
 
+DELIMITER $$
+CREATE FUNCTION calcular_precio_con_descuento(p_precio NUMERIC(10,2), p_descuento INT)
+RETURNS NUMERIC(10,2) DETERMINISTIC
+BEGIN
+    DECLARE precio_con_descuento NUMERIC(10,2);
+    SET precio_con_descuento = p_precio - (p_precio * (p_descuento / 100.0));
+    RETURN precio_con_descuento;
+END;
+$$
 
+select calcular_edad_cliente('1999-08-07');
+select calcular_precio_con_descuento(1000, 15);
