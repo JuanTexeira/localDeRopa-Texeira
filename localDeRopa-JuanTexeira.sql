@@ -14,7 +14,7 @@ CREATE TABLE prenda(
     stock INT NOT NULL,
     precio NUMERIC (10,2) NOT NULL,
     id_marca INT NOT NULL,
-    FOREIGN KEY (id_marca) REFERENCES marca(id_marca)
+    FOREIGN KEY (id_marca) REFERENCES marca(id_marca) ON DELETE CASCADE
 );
 
 CREATE TABLE vendedor(
@@ -181,6 +181,7 @@ SELECT * FROM marcas_con_descuento;
 SELECT * FROM stock_prendas_por_marca;
 SELECT * FROM ventas_por_mes;
 
+#Calcula la edad del cliente en base a la fecha de nacimiento y la fecha actual
 
 DELIMITER $$
 CREATE FUNCTION calcular_edad_cliente(p_fecha_nacimiento DATE)
@@ -196,6 +197,9 @@ BEGIN
     RETURN edad;
 END;
 $$
+DELIMITER ;
+
+#Calcula el precio final del prodcuto, pasandole como parámetros, el precio inicial del producto y el porcentaje de descuento a aplicar
 
 DELIMITER $$
 CREATE FUNCTION calcular_precio_con_descuento(p_precio NUMERIC(10,2), p_descuento INT)
@@ -206,6 +210,100 @@ BEGIN
     RETURN precio_con_descuento;
 END;
 $$
+DELIMITER ;
 
 select calcular_edad_cliente('1999-08-07');
 select calcular_precio_con_descuento(1000, 15);
+
+#Ordena los registros de la tabla marcas según X campo que se pase como parámetro
+
+DELIMITER $$
+CREATE PROCEDURE ordenarMarcas (IN campoOrdenamiento VARCHAR(45), IN orden VARCHAR(4))
+BEGIN
+    SET @query = CONCAT('SELECT * FROM marca ORDER BY ', campoOrdenamiento, ' ', orden);
+    PREPARE runSQL FROM @query;
+    EXECUTE runSQL;
+    DEALLOCATE PREPARE runSQL;
+END 
+$$
+DELIMITER ;
+
+call ordenarMarcas('descuento', 'DESC');
+
+#Inserta los datos de una venta realizada en la tabla venta y detalle_venta
+
+DELIMITER $$
+CREATE PROCEDURE insertarVenta (
+    IN p_id_vendedor INT,
+    IN p_id_cliente INT,
+    IN p_fecha_venta DATE,
+    IN p_monto NUMERIC(10,2),
+    IN p_id_prenda INT,
+    IN p_cantidad_productos INT
+)
+BEGIN
+	DECLARE v_id_venta INT;
+    
+    INSERT INTO venta (id_vendedor, id_cliente, fecha_venta, monto)
+    VALUES (p_id_vendedor, p_id_cliente, p_fecha_venta, p_monto);
+    
+    SET v_id_venta = LAST_INSERT_ID();
+    
+    INSERT INTO detalle_venta (id_prenda, id_venta, cantidad_productos)
+    VALUES (p_id_prenda, v_id_venta, p_cantidad_productos);
+END 
+$$
+DELIMITER ;
+
+call insertarVenta(1, 1, '1999-08-07', 50000, 2, 2);
+
+SELECT * FROM venta;
+SELECT * FROM detalle_venta ORDER BY id_venta ASC;
+
+#Se crea la tabla de auditoría y su trigger respectivo, para que esta se complete cada vez que se realiza un INSERT en la tabla "marca"
+
+CREATE TABLE audits (
+	ID_log INT PRIMARY KEY auto_increment,
+    entity varchar(100),
+    entity_id int,
+    insert_dt datetime,
+    created_by varchar(100),
+    last_updated_dt datetime,
+    last_updated_by varchar(100)
+);
+
+DELIMITER $$
+CREATE TRIGGER tr_insert_marca_aud
+AFTER INSERT ON marca
+FOR EACH ROW
+INSERT INTO audits (entity, entity_id, insert_dt, created_by, last_updated_dt, last_updated_by)
+VALUES ('marca', NEW.id_marca, CURRENT_TIMESTAMP(), USER(), CURRENT_TIMESTAMP(), USER());
+$$
+DELIMITER ;
+
+INSERT INTO marca (nombre_marca, pais_origen, descuento) VALUES
+    ('Zara', 'Spain', 10),
+    ('H&M', 'Sweden', 15);
+    
+SELECT * FROM audits
+
+#Al realizar un insert en la tabla "marca" en caso de que el descuento sea mayor a 100 lo setea en 100, y en caso de ser menor a 0 lo setea en 0
+
+DELIMITER $$
+CREATE TRIGGER validacion_marca
+BEFORE INSERT ON marca
+FOR EACH ROW
+BEGIN
+	IF NEW.descuento < 0 THEN
+		set NEW.descuento = 0;
+	ELSEIF NEW.descuento > 100 THEN
+		set NEW.descuento = 100;
+	END IF;
+END
+$$
+DELIMITER ;
+
+INSERT INTO marca (nombre_marca, pais_origen, descuento) VALUES
+    ('Puma', 'Germany', -5);
+    
+SELECT * FROM marca
